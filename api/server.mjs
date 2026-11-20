@@ -27,6 +27,7 @@ export function createApp(cfg = {}) {
     setupCode: cfg.setupCode ?? process.env.CODEX_SETUP_CODE ?? '',
     secureCookie: cfg.secureCookie ?? (process.env.CODEX_INSECURE_COOKIE !== '1'),
     sessionDays: 30,
+    pairTtlMs: cfg.pairTtlMs ?? 10 * 60 * 1000,
   };
   const postsDir = join(C.dataDir, 'posts');
   mkdirSync(postsDir, { recursive: true });
@@ -38,6 +39,18 @@ export function createApp(cfg = {}) {
   const saveAuth = () => writeJSON('auth.json', auth);
   let sessions = readJSON('sessions.json', {});                                           // token -> expiry ms
   const saveSessions = () => writeJSON('sessions.json', sessions);
+  // one-time pairing codes: a signed-in scribe makes one, a new device spends it to bind its own passkey
+  const pairs = new Map();                                                                 // code -> expiry ms
+  const PAIR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';                               // no 0/O/1/I
+  const newPair = () => {
+    for (const [k, v] of pairs) if (v < Date.now()) pairs.delete(k);
+    const raw = Array.from(randomBytes(8), b => PAIR_ALPHABET[b % 32]).join(''); const code = raw.slice(0, 4) + '-' + raw.slice(4);
+    pairs.set(code, Date.now() + C.pairTtlMs); return code;
+  };
+  const normPair = c => { const r = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return r.length === 8 ? r.slice(0, 4) + '-' + r.slice(4) : ''; };
+  const pairValid = c => { const k = normPair(c); return !!k && (pairs.get(k) || 0) > Date.now(); };
+  // who may register a passkey: the setup code (only while none exists), a signed-in scribe, or a live pairing code
+  const mayRegister = (me, code) => auth.credentials.length === 0 ? !!(C.setupCode && safeEq(code || '', C.setupCode)) : !!me || pairValid(code);
   const challenges = new Map();                                                           // challenge key -> {value, exp}
 
   const newSession = () => {
@@ -111,8 +124,7 @@ export function createApp(cfg = {}) {
     // --- register a passkey: first one needs the setup code; more (new phone) need an existing session ---
     if (path === '/api/register/options' && req.method === 'POST') {
       if (blocked(ip)) return send(res, 429, { error: 'slow down' });
-      const first = auth.credentials.length === 0;
-      if (first ? !(C.setupCode && safeEq(body.code || '', C.setupCode)) : !me) { fail(ip); return send(res, 403, { error: first ? 'wrong setup code' : 'sign in first' }); }
+      if (!mayRegister(me, body.code)) { fail(ip); return send(res, 403, { error: 'wrong or expired code' }); }
       const options = await generateRegistrationOptions({
         rpName: 'The Codex', rpID: C.rpID, userName: 'scribe', userID: unb64u(auth.userID), attestationType: 'none',
         excludeCredentials: auth.credentials.map(c => ({ id: c.id, transports: c.transports })),
@@ -122,14 +134,14 @@ export function createApp(cfg = {}) {
       return send(res, 200, { options }, { 'set-cookie': `codex_c=${key}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=300${C.secureCookie ? '; Secure' : ''}` });
     }
     if (path === '/api/register/verify' && req.method === 'POST') {
-      const first = auth.credentials.length === 0;
-      if (first ? !(C.setupCode && safeEq(body.code || '', C.setupCode)) : !me) { fail(ip); return send(res, 403, { error: 'not allowed' }); }
+      if (!mayRegister(me, body.code)) { fail(ip); return send(res, 403, { error: 'not allowed' }); }
       const ch = takeChallenge((req.headers.cookie || '').match(/codex_c=([\w-]+)/)?.[1]);
       if (!ch) return send(res, 400, { error: 'challenge expired' });
       const v = await verifyRegistrationResponse({ response: body.response, expectedChallenge: ch, expectedOrigin: C.origin, expectedRPID: C.rpID }).catch(() => null);
       if (!v?.verified) return send(res, 400, { error: 'not verified' });
       const c = v.registrationInfo.credential;
       auth.credentials.push({ id: c.id, publicKey: b64u(c.publicKey), counter: c.counter, transports: c.transports || [] }); saveAuth();
+      if (!me) pairs.delete(normPair(body.code));                       // a pairing code works once
       return send(res, 200, { ok: true }, { 'set-cookie': cookieFor(newSession()) });
     }
 
@@ -161,6 +173,8 @@ export function createApp(cfg = {}) {
 
     // --- everything below is the scribe only ---
     if (!me) return send(res, 401, { error: 'sealed' });
+
+    if (path === '/api/pair/new' && req.method === 'POST') return send(res, 200, { code: newPair(), minutes: Math.round(C.pairTtlMs / 60000) });
 
     if (path === '/api/preview' && req.method === 'POST') return send(res, 200, { html: md(String(body.body || '')) });
 

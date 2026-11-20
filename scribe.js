@@ -2,7 +2,7 @@
 // Everything here talks to /api (api/server.mjs). Nothing here can do anything without a valid passkey session.
 export async function init(C) {
   const { el, fmt, tail, renderList, sheet, panel, hooks, hud } = C;
-  const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'scribe.css?v=1'; document.head.append(link);
+  const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'scribe.css?v=2'; document.head.append(link);
 
   let ME = { authed: false, hasPasskey: false };
   let ALL = [], VOLS = [];
@@ -51,6 +51,9 @@ export async function init(C) {
           const response = await startAuthentication({ optionsJSON: o.options });
           await api('POST', '/login/verify', { response });
         })));
+      const pair = el('input', 'ed-field'); pair.placeholder = 'Pairing code, e.g. K7QM-4XWD'; pair.autocomplete = 'off'; pair.autocapitalize = 'characters'; pair.spellcheck = false; pair.maxLength = 12;
+      card.append(el('div', 'door-or', 'New device?'), el('p', 'door-note', 'On a device that is already signed in, press “Pair a new device” to get a code. Enter it here to bind this device’s own key.'), pair,
+        btn('Bind with code', 'pill ghost', () => run(msg, async () => { if (!pair.value.trim()) throw new Error('Enter the pairing code.'); await bind(pair.value.trim()); })));
     }
     card.append(msg); sheet.append(back, card); panel.scrollTop = 0;
 
@@ -93,7 +96,7 @@ export async function init(C) {
     row.append(vin, btn('Found', 'pill sm', mk));
     top.append(btn('Inscribe', 'pill sm', () => edit(null)),
       btn('New volume', 'pill sm ghost', () => { row.hidden = !row.hidden; if (!row.hidden) vin.focus(); }),
-      btn('Bind another device', 'pill sm ghost', async () => { try { await bind(''); toast('Device bound.'); } catch (e) { toast(e.name === 'NotAllowedError' ? 'Cancelled.' : e.message, true); } }),
+      btn('Pair a new device', 'pill sm ghost', async () => { try { const j = await api('POST', '/pair/new', {}); showPair(j.code, j.minutes); } catch (e) { toast(e.message, true); } }),
       btn('Seal the door', 'pill sm ghost', () => leave()));
     top.append(row);
     renderList(ALL, {
@@ -101,6 +104,16 @@ export async function init(C) {
       onOpen: p => p.draft ? edit(p.id) : C.readView(p.slug, true),
       onRemoveVolume: async v => { try { await api('DELETE', '/volumes/' + v); toast('Volume dissolved.'); scribeList(); } catch (e) { toast(e.message, true); } },
     });
+  }
+
+  // show a pairing code, large, with a countdown
+  function showPair(code, minutes) {
+    const old = sheet.querySelector('.pairbox'); if (old) old.remove();
+    const box = el('div', 'pairbox'); const num = el('div', 'pairnum', code); const note = el('p', 'pairnote');
+    const end = Date.now() + minutes * 6e4; const tick = () => { const left = Math.max(0, Math.round((end - Date.now()) / 1000)); note.textContent = left ? `Enter this on the new device. It works once and expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}.` : 'This code has expired.'; if (!left) clearInterval(iv); };
+    const iv = setInterval(() => { if (!box.isConnected) return clearInterval(iv); tick(); }, 1000); tick();
+    box.append(el('div', 'eyebrow', 'Pairing code'), num, note, btn('Dismiss', 'pill sm ghost', () => box.remove()));
+    sheet.querySelector('.scribe-bar').after(box);
   }
 
   // an "Amend" button on the reader (sealed folios open here)

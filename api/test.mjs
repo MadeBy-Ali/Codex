@@ -10,7 +10,7 @@ import { createApp } from './server.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const tmp = mkdtempSync(join(tmpdir(), 'codex-test-'));
 const site = join(tmp, 'site'); mkdirSync(site);
-const app = createApp({ dataDir: join(tmp, 'data'), siteDir: site, rpID: 'localhost', origin: 'http://localhost:4175', setupCode: 'letmein', secureCookie: false });
+const app = createApp({ dataDir: join(tmp, 'data'), siteDir: site, rpID: 'localhost', origin: 'http://localhost:4175', setupCode: 'letmein', secureCookie: false, pairTtlMs: 400 });
 await new Promise(r => app.server.listen(0, '127.0.0.1', r));
 const base = 'http://127.0.0.1:' + app.server.address().port;
 const cookie = 'codex_s=' + app.newSession();
@@ -60,6 +60,31 @@ assert.equal((await call('DELETE', '/api/posts/' + r.json.post.id)).status, 200)
 assert.equal(published().length, 0); ok('delete removes entries and pages');
 assert.equal((await call('DELETE', '/api/volumes/on-craft')).status, 200); ok('empty volume can be deleted');
 
+// pairing codes: only a signed-in scribe can make one; a new device can spend it; it expires
+assert.equal((await call('POST', '/api/pair/new', {}, { auth: false })).status, 401); ok('anonymous cannot make a pairing code');
+r = await call('POST', '/api/pair/new', {}); assert.match(r.json.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/); const pc = r.json.code;
+assert.equal((await call('POST', '/api/register/options', { code: 'AAAA-BBBB' }, { auth: false })).status, 403); ok('wrong pairing code refused');
+assert.equal((await call('POST', '/api/register/options', { code: pc }, { auth: false })).status, 403); ok('pairing code is refused while no key exists (setup code rules)');
+await new Promise(r => setTimeout(r, 10));
 await call('POST', '/api/logout'); assert.equal((await call('GET', '/api/posts')).status, 401); ok('logout ends the session');
+
+// --- a second app that already has a key bound (like the live server): pairing codes should now work ---
+{
+  const d2 = join(tmp, 'data2'); mkdirSync(d2, { recursive: true });
+  (await import('node:fs')).writeFileSync(join(d2, 'auth.json'), JSON.stringify({ userID: 'AAAAAAAAAAAAAAAAAAAAAA', credentials: [{ id: 'fakecred', publicKey: 'AAAA', counter: 0, transports: [] }] }));
+  const app2 = createApp({ dataDir: d2, siteDir: site, rpID: 'localhost', origin: 'http://localhost:4175', setupCode: 'letmein', secureCookie: false, pairTtlMs: 300 });
+  await new Promise(r => app2.server.listen(0, '127.0.0.1', r));
+  const b2 = 'http://127.0.0.1:' + app2.server.address().port; const ck2 = 'codex_s=' + app2.newSession();
+  const c2 = (path, body, auth = true) => fetch(b2 + path, { method: 'POST', headers: { 'content-type': 'application/json', ...(auth ? { cookie: ck2 } : {}) }, body: JSON.stringify(body) }).then(async r => ({ status: r.status, json: await r.json().catch(() => null) }));
+  assert.equal((await c2('/api/register/options', { code: 'letmein' }, false)).status, 403); ok('setup code stops working once a key exists');
+  const code = (await c2('/api/pair/new', {})).json.code;
+  assert.equal((await c2('/api/register/options', { code: 'AAAA-BBBB' }, false)).status, 403); ok('wrong pairing code refused');
+  const good = await c2('/api/register/options', { code: code.toLowerCase().replace('-', ' ') }, false);
+  assert.equal(good.status, 200); assert.ok(good.json.options.challenge); ok('a live pairing code gets registration options (case/spacing forgiven)');
+  assert.equal((await c2('/api/register/options', { code: 'x' }, false)).status, 403); ok('garbage code refused');
+  await new Promise(r => setTimeout(r, 350));
+  assert.equal((await c2('/api/register/options', { code }, false)).status, 403); ok('pairing code expires');
+  app2.server.close();
+}
 
 app.server.close(); rmSync(tmp, { recursive: true, force: true }); console.log('all', n, 'passed');

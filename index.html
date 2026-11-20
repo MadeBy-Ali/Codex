@@ -202,7 +202,7 @@ function readView(slug, push) {
 }
 async function refreshPublic() { try { POSTS = await (await fetch('posts.json?' + Date.now())).json(); } catch {} }
 let scribeP;
-const loadScribe = () => scribeP ||= import('./scribe.js?v=1').then(m => m.init({ el, fmt, roman, tail, pretty, renderList, readView, listView, refreshPublic, sheet, panel, hooks, hud,
+const loadScribe = () => scribeP ||= import('./scribe.js?v=2').then(m => m.init({ el, fmt, roman, tail, pretty, renderList, readView, listView, refreshPublic, sheet, panel, hooks, hud,
   isOpen: () => panelOpen, isSimple: () => simple, showPanel: () => (panelOpen || (simple ? 0 : showPanel())) }));
 function showPanel() {
   panel.classList.add('open'); panel.inert = false; panelOpen = true;
