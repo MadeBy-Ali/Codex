@@ -1,0 +1,10 @@
+:root{--bg:#05090c;--sand:#E8E2D6;--ice:#A9E6F5;--brass:#B8935A;--serif:Cinzel,Georgia,serif}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 0,#0d1a20,var(--bg) 60%) fixed;color:var(--sand);font-family:Montserrat,system-ui,sans-serif}
+.read{max-width:680px;margin:0 auto;padding:56px 20px 120px}
+.back{font-size:11px;letter-spacing:.2em;text-transform:uppercase;font-weight:700;color:var(--ice);text-decoration:none;opacity:.8}
+.read h1{font-family:var(--serif);font-size:clamp(30px,6vw,46px);line-height:1.12;letter-spacing:.04em;text-transform:uppercase;margin:28px 0 8px}
+.meta{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);font-weight:700;margin:0 0 36px}
+article{font-size:17px;line-height:1.85;font-weight:500}article h2,article h3{font-family:var(--serif);letter-spacing:.03em;color:var(--ice);margin:2em 0 .4em;line-height:1.25}
+article a{color:var(--ice)}article blockquote{margin:1.6em 0;padding-left:20px;border-left:2px solid var(--brass);font-style:italic;opacity:.9}
+article blockquote p{margin:0}article code{background:rgba(169,230,245,.1);padding:2px 6px;border-radius:3px;font-size:.9em}
+article pre{background:rgba(0,0,0,.45);border:1px solid rgba(169,230,245,.15);padding:16px;border-radius:4px;overflow:auto}article pre code{background:none;padding:0}

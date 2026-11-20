@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Codex · limvoid</title>
+<meta name="description" content="The sealed side of limvoid: essays, thoughts and ideas, set down by machine light. Read only.">
+<meta property="og:title" content="The Codex">
+<meta property="og:description" content="Essays, thoughts and ideas, set down by machine light.">
+<meta name="theme-color" content="#05090c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2305090c'/%3E%3Ccircle cx='32' cy='32' r='15' fill='none' stroke='%23b8935a' stroke-width='5' stroke-dasharray='6 4'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%239be8ff'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#05090c; --sand:#E8E2D6; --ice:#A9E6F5; --brass:#B8935A; --serif:Cinzel, Georgia, serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--sand); font-family: Montserrat, system-ui, sans-serif; }
+  body { overflow: hidden; }
+  canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .simple canvas#scene { display: none; }
+  .simple body, body.simple { overflow: auto; }
+
+  /* background ornament for the phone version: a slow gear and drifting cold fog */
+  #bg { display: none; position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .simple #bg { display: block; }
+  #bg .gear { position: absolute; right: -28vmin; top: -10vmin; width: 90vmin; opacity: .16; animation: spin 140s linear infinite; }
+  #bg .gear.two { right: auto; left: -34vmin; top: auto; bottom: -26vmin; width: 70vmin; opacity: .12; animation-duration: 110s; animation-direction: reverse; }
+  #bg .fog { position: absolute; width: 90vmax; height: 60vmax; left: -20vmax; bottom: -30vmax; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(169,230,245,.16), transparent); animation: drift 26s ease-in-out infinite alternate; }
+  #bg .fog.b { left: auto; right: -30vmax; bottom: auto; top: -26vmax; animation-duration: 34s; opacity: .8; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(8vmax, -5vmax) scale(1.15); } }
+  @media (prefers-reduced-motion: reduce) { #bg .gear, #bg .fog, .sigil svg { animation: none !important; } }
+
+  /* opener */
+  #opener { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; padding: 24px;
+    background: radial-gradient(ellipse at 50% 40%, #0d1a20, var(--bg) 70%); transition: opacity 1.4s ease, visibility 1.4s; }
+  #opener.gone { opacity: 0; visibility: hidden; pointer-events: none; }
+  .sigil { width: 92px; height: 92px; margin: 0 auto 22px; }
+  .sigil svg { width: 100%; height: 100%; animation: spin 40s linear infinite; filter: drop-shadow(0 0 10px rgba(169,230,245,.35)); }
+  #opener .k { font-size: 11px; letter-spacing: .3em; font-weight: 700; color: var(--brass); text-transform: uppercase; }
+  #opener h1 { margin: 14px 0 8px; font-family: var(--serif); font-size: clamp(34px, 7vw, 66px); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  #opener p { margin: 0 0 30px; opacity: .62; font-size: 14.5px; letter-spacing: .02em; }
+  .pill { font: inherit; font-size: 12px; letter-spacing: .24em; text-transform: uppercase; font-weight: 700; color: var(--bg); background: var(--ice);
+    border: 0; padding: 14px 28px; border-radius: 3px; cursor: pointer; transition: transform .15s, box-shadow .3s; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
+  .pill:hover { box-shadow: 0 0 24px rgba(169,230,245,.5); }
+  .pill:active { transform: scale(.96); }
+  .pill.ghost { background: rgba(169,230,245,.08); color: var(--ice); outline: 1px solid rgba(169,230,245,.35); outline-offset: -1px; }
+
+  /* hud */
+  #hud { position: fixed; left: 24px; right: 24px; top: 20px; z-index: 5; display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 700; color: var(--ice); opacity: 0; transition: opacity 1s .8s; pointer-events: none; }
+  #hud.on { opacity: .8; }
+  #hud a { color: inherit; text-decoration: none; pointer-events: auto; }
+  #hint { position: fixed; left: 0; right: 0; bottom: 26px; z-index: 5; text-align: center; font-size: 11px; letter-spacing: .28em; text-transform: uppercase;
+    font-weight: 700; color: var(--ice); opacity: 0; transition: opacity .5s; pointer-events: none; }
+  #hint.on { opacity: .85; }
+
+  /* panel: the list and the reader */
+  #panel { position: fixed; inset: 0; z-index: 10; display: none; overflow-y: auto; background: rgba(5,9,12,0); opacity: 0; transition: opacity .6s; }
+  #panel.open { display: block; }
+  #panel.show { opacity: 1; background: rgba(4,8,11,.84); backdrop-filter: blur(6px); }
+  .simple #panel { background: transparent; backdrop-filter: none; z-index: 1; }
+  .sheet { max-width: 700px; margin: 0 auto; padding: 72px 22px 120px; position: relative; }
+  .sheet .close { position: fixed; top: 18px; right: 22px; z-index: 12; }
+  .simple .sheet { padding-top: 28px; }
+  .simple .sheet .close { position: static; display: block; margin: 0 0 30px auto; }
+  .sheet .eyebrow { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; font-weight: 700; color: var(--brass); }
+  .sheet h2 { font-family: var(--serif); font-size: clamp(30px, 6vw, 46px); line-height: 1.12; letter-spacing: .04em; text-transform: uppercase; margin: 10px 0 14px; }
+  .sheet .rule { height: 12px; margin: 0 0 22px; background:
+      linear-gradient(var(--brass), var(--brass)) left center / calc(50% - 14px) 1px no-repeat,
+      linear-gradient(var(--brass), var(--brass)) right center / calc(50% - 14px) 1px no-repeat;
+    position: relative; opacity: .7; }
+  .sheet .rule::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px; transform: rotate(45deg); border: 1px solid var(--brass); }
+  .item { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid rgba(184,147,90,.28);
+    color: inherit; font: inherit; padding: 22px 0; cursor: pointer; }
+  .grp .item:last-child { border-bottom: 1px solid rgba(184,147,90,.28); }
+  .item .d { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--brass); font-weight: 700; }
+  .item h3 { margin: 6px 0 6px; font-family: var(--serif); letter-spacing: .03em; font-size: 21px; transition: color .2s, text-shadow .3s; }
+  .item p { margin: 0; opacity: .66; font-size: 14.5px; line-height: 1.6; }
+  .item:hover h3, .item:focus-visible h3 { color: var(--ice); text-shadow: 0 0 18px rgba(169,230,245,.45); }
+  .back { font: inherit; background: none; border: 0; color: var(--ice); cursor: pointer; font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+    font-weight: 700; opacity: .8; padding: 0; margin-bottom: 18px; }
+  .meta { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--brass); font-weight: 700; margin: 0 0 32px; }
+  .prose { font-size: 17.5px; line-height: 1.9; font-weight: 500; }
+  .prose h2, .prose h3 { font-family: var(--serif); letter-spacing: .03em; font-size: 22px; margin: 2em 0 .4em; color: var(--ice); text-transform: none; }
+  .prose a { color: var(--ice); }
+  .prose blockquote { margin: 1.6em 0; padding-left: 20px; border-left: 2px solid var(--brass); font-style: italic; opacity: .9; }
+  .prose blockquote p { margin: 0; }
+  .prose code { background: rgba(169,230,245,.1); padding: 2px 6px; border-radius: 3px; font-size: .9em; }
+  .prose pre { background: rgba(0,0,0,.45); padding: 16px; border-radius: 4px; overflow: auto; border: 1px solid rgba(169,230,245,.15); }
+  .prose pre code { background: none; padding: 0; }
+  .vol { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 42px 0 2px; }
+  .vol:first-of-type { margin-top: 6px; }
+  .vol .vn { font-family: var(--serif); font-size: 14px; letter-spacing: .24em; text-transform: uppercase; color: var(--brass); font-weight: 700; }
+  .vol .vn::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 12px 1px 0; transform: rotate(45deg); background: var(--brass); box-shadow: 0 0 10px rgba(184,147,90,.6); }
+  .vol .vc { font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; opacity: .5; font-weight: 700; }
+  .vol .vx { font: inherit; font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; color: var(--ice); background: none; border: 0; cursor: pointer; opacity: .7; padding: 0; }
+  .item .tag { display: inline-block; margin-left: 10px; padding: 2px 8px; font-size: 9.5px; letter-spacing: .22em; color: var(--ice); outline: 1px solid rgba(169,230,245,.5); outline-offset: -1px; vertical-align: 1px; }
+  .item.draft h3 { opacity: .78; }
+  .empty { opacity: .6; padding: 24px 0; }
+  .door { color: inherit; text-decoration: none; letter-spacing: .24em; text-transform: uppercase; font-size: 10.5px; font-weight: 700; margin-left: 14px; opacity: .8; border-bottom: 1px dotted rgba(232,226,214,.5); }
+  .site { margin-top: 56px; font-size: 12px; opacity: .55; }
+  .site a { color: inherit; }
+</style>
+</head>
+<body>
+<div id="bg" aria-hidden="true"><div class="fog"></div><div class="fog b"></div></div>
+<canvas id="scene" aria-hidden="true"></canvas>
+
+<div id="opener">
+  <div>
+    <div class="sigil" id="sigil" aria-hidden="true"></div>
+    <div class="k">The sealed side of limvoid</div>
+    <h1>The Codex</h1>
+    <p>Writings set down by machine light. Read, never altered.</p>
+    <button class="pill" id="enter" type="button">Unseal</button>
+  </div>
+</div>
+
+<div id="hud"><a href="https://limvoid.com">← limvoid.com</a><span>Codex</span></div>
+<div id="hint">Open the codex</div>
+
+<div id="panel" role="dialog" aria-modal="true" aria-label="Codex entries" inert>
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const $ = s => document.querySelector(s);
+const panel = $('#panel'), sheet = $('#sheet'), hint = $('#hint'), hud = $('#hud');
+const params = new URLSearchParams(location.search);
+const fmt = d => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+/* ---------- ornament: one small SVG wheel, reused for the opener and the phone background ---------- */
+function gearSVG(teeth, stroke, sw) {
+  const rO = 96, rI = 84, st = Math.PI * 2 / teeth; let d = '';
+  for (let i = 0; i < teeth; i++) { const a = i * st; [[0, rI], [.22, rO], [.5, rO], [.72, rI]].forEach(([f, r], k) => { d += (i === 0 && k === 0 ? 'M' : 'L') + (100 + Math.cos(a + f * st) * r).toFixed(1) + ' ' + (100 + Math.sin(a + f * st) * r).toFixed(1); }); }
+  let spokes = ''; for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; spokes += `M${(100 + Math.cos(a) * 18).toFixed(1)} ${(100 + Math.sin(a) * 18).toFixed(1)}L${(100 + Math.cos(a) * 58).toFixed(1)} ${(100 + Math.sin(a) * 58).toFixed(1)}`; }
+  return `<svg viewBox="0 0 200 200" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"><path d="${d}Z"/><circle cx="100" cy="100" r="66"/><circle cx="100" cy="100" r="58" stroke-dasharray="3 5"/><circle cx="100" cy="100" r="18"/><path d="${spokes}"/></svg>`;
+}
+$('#sigil').innerHTML = gearSVG(18, '#B8935A', 3.2);
+{ const bg = $('#bg'); bg.insertAdjacentHTML('afterbegin', gearSVG(30, '#A9E6F5', 1.4).replace('<svg', '<svg class="gear"') + gearSVG(22, '#B8935A', 1.6).replace('<svg', '<svg class="gear two"')); }
+
+/* ---------- posts: list + reader (used by both the 3D desk and the simple version) ---------- */
+let POSTS = [];
+let panelOpen = false;
+const hooks = {};   // the scribe plugs in here, only after sign-in
+const roman = n => { let s = ''; for (const [v, r] of [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']]) while (n >= v) { s += r; n -= v; } return s; };
+const tail = id => id.split('/').pop().replace(/^\d{4}-\d{2}-\d{2}-/, '');
+const pretty = v => v.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+// One renderer for the public shelf and the scribe's shelf. Items: {slug,title,date,summary,minutes,volume,draft}
+function renderList(items, o = {}) {
+  sheet.replaceChildren();
+  const close = el('button', 'pill ghost close', simple ? 'limvoid.com' : 'Close'); close.type = 'button';
+  close.onclick = simple ? () => { location.href = 'https://limvoid.com'; } : closePanel;
+  sheet.append(close, el('div', 'eyebrow', 'Writings · thoughts · ideas'), el('h2', null, 'The Codex'), el('div', 'rule'));
+  if (o.top) sheet.append(o.top);
+  const sealed = items.filter(p => !p.draft).sort((a, b) => (a.date + a.slug).localeCompare(b.date + b.slug));
+  const folio = new Map(sealed.map((p, i) => [p, i + 1]));
+  const vols = [...new Set([...(o.volumes || []), ...items.map(p => p.volume).filter(Boolean)])].sort();
+  const groups = vols.map(v => [v, items.filter(p => p.volume === v)]); groups.push(['', items.filter(p => !p.volume)]);
+  const open = o.onOpen || (p => readView(p.slug, true));
+  if (!items.length && !vols.length) sheet.append(el('p', 'empty', 'Nothing written here yet.'));
+  for (const [v, list] of groups) {
+    if (!list.length && !(v && o.volumes)) continue;
+    if (v) {
+      const h = el('div', 'vol'); h.append(el('span', 'vn', pretty(v)));
+      if (!list.length && o.onRemoveVolume) { const x = el('button', 'vx', 'Remove empty volume'); x.type = 'button'; x.onclick = () => o.onRemoveVolume(v); h.append(x); }
+      else h.append(el('span', 'vc', list.length + (list.length === 1 ? ' folio' : ' folios')));
+      sheet.append(h);
+    } else if (vols.length) sheet.append(Object.assign(el('div', 'vol'), { innerHTML: '<span class="vn">Loose folios</span>' }));
+    const g = el('div', 'grp');
+    list.forEach(p => {
+      const b = el('button', 'item' + (p.draft ? ' draft' : '')); b.type = 'button';
+      const d = el('div', 'd', (p.draft ? 'Unsealed' : 'Folio ' + roman(folio.get(p))) + ' · ' + fmt(p.date) + ' · ' + p.minutes + ' min');
+      const h3 = el('h3', null, p.title || 'Untitled'); if (p.draft) h3.append(el('span', 'tag', 'Draft'));
+      b.append(d, h3, el('p', null, p.summary)); b.onclick = () => open(p); g.append(b);
+    });
+    sheet.append(g);
+  }
+  const foot = Object.assign(el('p', 'site'), { innerHTML: 'Part of <a href="https://limvoid.com">limvoid.com</a>.' });
+  if (!o.noDoor) { const door = el('a', 'door', 'Scribe'); door.href = '#'; door.onclick = e => { e.preventDefault(); loadScribe().then(sc => sc.signin()); }; foot.append(door); }
+  sheet.append(foot);
+  panel.scrollTop = 0;
+}
+function listView() { if (hooks.list) return hooks.list(); renderList(POSTS); }
+function readView(slug, push) {
+  const p = POSTS.find(x => x.slug === slug); if (!p) return listView();
+  sheet.replaceChildren();
+  const back = el('button', 'back', '← all entries'); back.type = 'button';
+  back.onclick = () => { history.replaceState(null, '', location.pathname + location.search); listView(); };
+  const art = el('article', 'prose'); art.innerHTML = p.html;
+  sheet.append(back, el('h2', null, p.title), el('p', 'meta', fmt(p.date) + ' · ' + p.minutes + ' min read'), art);
+  if (hooks.read) hooks.read(p);
+  if (push) history.replaceState(null, '', '#' + slug);
+  panel.scrollTop = 0; document.title = p.title + ' · The Codex';
+}
+async function refreshPublic() { try { POSTS = await (await fetch('posts.json?' + Date.now())).json(); } catch {} }
+let scribeP;
+const loadScribe = () => scribeP ||= import('./scribe.js?v=1').then(m => m.init({ el, fmt, roman, tail, pretty, renderList, readView, listView, refreshPublic, sheet, panel, hooks, hud,
+  isOpen: () => panelOpen, isSimple: () => simple, showPanel: () => (panelOpen || (simple ? 0 : showPanel())) }));
+function showPanel() {
+  panel.classList.add('open'); panel.inert = false; panelOpen = true;
+  requestAnimationFrame(() => panel.classList.add('show'));
+  const h = location.hash.slice(1); h ? readView(h, false) : listView();
+}
+function closePanel() {
+  panel.classList.remove('show'); panelOpen = false; panel.inert = true;
+  document.title = "The Codex · limvoid";
+  setTimeout(() => { if (!panelOpen) panel.classList.remove('open'); }, 650);
+  onPanelClosed();
+}
+
+/* ---------- which version? the 3D desk needs WebGL, a fine pointer, a real screen and motion allowed ---------- */
+function webgl() { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } }
+const simple = params.has('simple') || matchMedia('(pointer: coarse)').matches || innerWidth < 760
+  || matchMedia('(prefers-reduced-motion: reduce)').matches || !webgl();
+let onPanelClosed = () => {};
+
+try { POSTS = await (await fetch('posts.json')).json(); } catch { POSTS = []; }
+fetch('/api/me', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(m => { if (m && m.authed) loadScribe().then(sc => sc.enter()); }).catch(() => {});
+
+if (simple) {
+  document.body.classList.add('simple'); $('#opener').remove(); hud.remove(); hint.remove();
+  panel.classList.add('open', 'show'); panel.inert = false; panelOpen = true;
+  const h = location.hash.slice(1); h ? readView(h, false) : listView();
+  addEventListener('hashchange', () => { const s = location.hash.slice(1); s ? readView(s, false) : listView(); });
+} else {
+  /* ---------- the 3D chamber ---------- */
+  const canvas = $('#scene');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x04080b); scene.fog = new THREE.Fog(0x04080b, 12, 42);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 40);
+  const resize = () => { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); };
+  addEventListener('resize', resize); resize();
+
+  const ICE = 0x9be8ff, BRASS = 0xb8935a;
+  const std = (color, rough = .6, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: .35, ...extra });
+  const mesh = (geo, mat, x = 0, y = 0, z = 0, parent = scene) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; parent.add(m); return m; };
+  const brass = std(BRASS, .35, { metalness: .8 }), iron = std(0x1b2329, .5, { metalness: .7 }), darkIron = std(0x10161a, .6, { metalness: .6 });
+
+  /* a toothed wheel with a hub and round cut-outs, extruded */
+  function gearGeo(rOut, rIn, teeth, depth, spokes = 5) {
+    const sh = new THREE.Shape(), step = Math.PI * 2 / teeth;
+    for (let i = 0; i < teeth; i++) {
+      const a = i * step;
+      [[0, rIn], [.22, rOut], [.5, rOut], [.72, rIn]].forEach(([f, r], k) => { const x = Math.cos(a + f * step) * r, y = Math.sin(a + f * step) * r; (i === 0 && k === 0) ? sh.moveTo(x, y) : sh.lineTo(x, y); });
+    }
+    const hole = new THREE.Path(); hole.absarc(0, 0, rIn * .16, 0, Math.PI * 2, true); sh.holes.push(hole);
+    for (let k = 0; k < spokes; k++) { const a = k / spokes * Math.PI * 2, p = new THREE.Path(); p.absarc(Math.cos(a) * rIn * .56, Math.sin(a) * rIn * .56, rIn * .2, 0, Math.PI * 2, true); sh.holes.push(p); }
+    return new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 20 });
+  }
+
+  /* the back wall: a vast wheel behind the throne with a cold halo */
+  mesh(new THREE.PlaneGeometry(44, 26), std(0x05080b, .9), 0, 8, -11.8).castShadow = false;
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(5.9, .03, 8, 200), new THREE.MeshBasicMaterial({ color: ICE, transparent: true, opacity: .5 })); halo.position.set(-.1, 6.6, -11.4); scene.add(halo);
+  const halo2 = new THREE.Mesh(new THREE.TorusGeometry(6.3, .012, 8, 200), new THREE.MeshBasicMaterial({ color: BRASS, transparent: true, opacity: .55 })); halo2.position.copy(halo.position); scene.add(halo2);
+  const wheels = [
+    { g: mesh(gearGeo(5.5, 4.9, 56, .25, 9), std(0x171c20, .5, { metalness: .6 }), -.1, 6.6, -11.5), w: .025 },
+    { g: mesh(gearGeo(2.6, 2.25, 28, .25, 7), std(0x2a2318, .45, { metalness: .7 }), -8.4, 8.2, -11.4), w: -.05 },
+    { g: mesh(gearGeo(2.0, 1.72, 22, .25, 6), std(0x171c20, .5, { metalness: .6 }), 8.0, 7.6, -11.4), w: .065 }
+  ];
+  wheels.forEach(o => { o.g.castShadow = false; o.g.scale.setScalar(1.3); }); halo.scale.setScalar(1.3); halo2.scale.setScalar(1.3);
+
+  /* the dais: wide steps climbing a long way back to the throne */
+  const DESK_Y = 1.0;
+  mesh(new THREE.BoxGeometry(44, 0.16, 26), std(0x0f151a, .5, { metalness: .5 }), 0, DESK_Y - 0.08, -3);
+  mesh(new THREE.BoxGeometry(44, 2.6, 0.12), darkIron, 0, -0.4, 6.6);
+  [[12, .18, 7.2, 0], [9.6, .18, 6.0, .18], [7.4, .18, 4.8, .36], [5.4, .18, 3.8, .54]].forEach(([w, h, d, y]) => mesh(new THREE.BoxGeometry(w, h, d), std(0x151c21, .55, { metalness: .5 }), -.1, DESK_Y + y + h / 2, -8.5 + d / 2 - 1.9, scene));
+  const THR_Y = DESK_Y + .72;
+  /* a processional way inlaid in the floor between the altar and the throne: two brass rails, a cold-lit edge and cross ticks, so the gap reads */
+  [-1.55, 1.35].forEach(x => { mesh(new THREE.BoxGeometry(.07, .012, 6.6), brass, x, DESK_Y + .006, -3.9).castShadow = false;
+    const l = new THREE.Mesh(new THREE.BoxGeometry(.02, .014, 6.6), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: .55 })); l.position.set(x + (x < 0 ? .09 : -.09), DESK_Y + .008, -3.9); scene.add(l); });
+  for (let z = -1.0; z > -7; z -= .9) { const t = new THREE.Mesh(new THREE.BoxGeometry(2.8, .012, .03), new THREE.MeshBasicMaterial({ color: 0xb8935a, transparent: true, opacity: .45 })); t.position.set(-.1, DESK_Y + .007, z); scene.add(t); }
+
+  /* the empty throne, huge and far back: a plinth, a seat between two tall blocks, a pointed back with a gate of cold light, and a fan of pipes behind */
+  const throne = new THREE.Group(); throne.position.set(-.1, THR_Y, -8.5); throne.scale.setScalar(1.75); scene.add(throne);
+  mesh(new THREE.BoxGeometry(5.4, 1.6, 2.9), darkIron, 0, .8, 0, throne);
+  [.3, .9, 1.5].forEach(y => mesh(new THREE.BoxGeometry(5.5, .07, .05), brass, 0, y, 1.46, throne));                                              // brass bands across the plinth front
+  [-1.8, 0, 1.8].forEach(x => { mesh(new THREE.BoxGeometry(1.5, .62, .05), std(0x222d33, .5, { metalness: .6 }), x, .6, 1.46, throne);              // inset panels, edged in cold light
+    const e = new THREE.Mesh(new THREE.BoxGeometry(1.5, .025, .02), new THREE.MeshBasicMaterial({ color: 0x9be8ff })); e.position.set(x, .93, 1.495); throne.add(e); });
+  mesh(new THREE.BoxGeometry(3.4, .18, 2.3), std(0x2a353b, .5, { metalness: .5 }), 0, 1.69, .1, throne);                                          // the seat slab
+  mesh(new THREE.BoxGeometry(3.0, .12, 1.9), std(0x3a4a52, .8, { metalness: .2 }), 0, 1.84, .1, throne);                                           // a worn cushion pad
+  mesh(new THREE.BoxGeometry(3.5, .06, .08), brass, 0, 1.7, 1.28, throne);                                                                         // brass lip along the seat front
+  mesh(new THREE.BoxGeometry(3.5, .05, .06), brass, 0, 1.9, 1.06, throne);
+  [-1, 1].forEach(sd => {
+    mesh(new THREE.BoxGeometry(1.0, .22, 2.3), brass, sd * 2.15, 1.7, .05, throne);                                                            // arm block
+    mesh(new THREE.BoxGeometry(.95, 1.9, 1.4), std(0x1b2328, .5, { metalness: .6 }), sd * 2.15, 2.3, -.25, throne);                                // tall side block
+    mesh(new THREE.BoxGeometry(1.03, .08, 1.48), brass, sd * 2.15, 3.29, -.25, throne);
+    mesh(new THREE.BoxGeometry(.55, .5, .06), brass, sd * 2.15, 2.0, .47, throne);                                                                 // plate on the block front
+  });
+  const back = new THREE.Shape(); back.moveTo(-1.8, 0); back.lineTo(1.8, 0); back.lineTo(1.8, 2.5); back.quadraticCurveTo(1.8, 3.6, 0, 4.5); back.quadraticCurveTo(-1.8, 3.6, -1.8, 2.5); back.lineTo(-1.8, 0);
+  const gate = new THREE.Path(); gate.moveTo(-1.05, .7); gate.lineTo(1.05, .7); gate.lineTo(1.05, 2.4); gate.quadraticCurveTo(1.05, 3.1, 0, 3.6); gate.quadraticCurveTo(-1.05, 3.1, -1.05, 2.4); gate.lineTo(-1.05, .7); back.holes.push(gate);
+  const backM = new THREE.Mesh(new THREE.ExtrudeGeometry(back, { depth: .4, bevelEnabled: false }), std(0x12181c, .5, { metalness: .65 })); backM.position.set(0, .9, -.9); backM.castShadow = backM.receiveShadow = true; throne.add(backM);
+  /* the vault behind the back: a dim, uneven glow that breathes, like light leaking from a sealed chamber */
+  const gc = document.createElement('canvas'); gc.width = 256; gc.height = 256; { const g = gc.getContext('2d'), gr = g.createLinearGradient(0, 256, 0, 0); gr.addColorStop(0, 'rgba(20,70,95,.5)'); gr.addColorStop(.6, 'rgba(70,170,205,.8)'); gr.addColorStop(1, 'rgba(120,215,240,.9)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(0,10,16,${.1 + Math.random() * .35})`; g.fillRect(Math.random() * 256, 0, 2 + Math.random() * 14, 256); }
+    const v = g.createRadialGradient(128, 150, 20, 128, 150, 170); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,6,10,.75)'); g.fillStyle = v; g.fillRect(0, 0, 256, 256); }
+  const gateShape = new THREE.Shape(); gateShape.moveTo(-1.05, .7); gateShape.lineTo(1.05, .7); gateShape.lineTo(1.05, 2.4); gateShape.quadraticCurveTo(1.05, 3.1, 0, 3.6); gateShape.quadraticCurveTo(-1.05, 3.1, -1.05, 2.4); gateShape.lineTo(-1.05, .7);
+  const gateGlow = new THREE.Mesh(new THREE.ShapeGeometry(gateShape), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(gc), side: THREE.DoubleSide, transparent: true, opacity: .5 }));
+  { const pa = gateGlow.geometry.attributes.position, uv = []; for (let i = 0; i < pa.count; i++) uv.push((pa.getX(i) + 1.05) / 2.1, (pa.getY(i) - .7) / 2.9); gateGlow.geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); }
+  gateGlow.position.set(0, .9, -.75); throne.add(gateGlow);
+  /* the reactor: a big arc-reactor disc behind the backrest, seen through the gate. Every pipe leaves from its rim. */
+  const RC = new THREE.Vector3(0, 2.9, -1.0), RR = .88;
+  const reactor = new THREE.Group(); reactor.position.copy(RC); throne.add(reactor);
+  const cyanMat = new THREE.MeshBasicMaterial({ color: 0x9be8ff });
+  reactor.add(new THREE.Mesh(new THREE.CircleGeometry(RR * 1.08, 40), darkIron));                                                                  // back plate
+  { const c = new THREE.Mesh(new THREE.TorusGeometry(RR, .07, 8, 48), brass); c.position.z = .03; reactor.add(c); }                                 // outer collar
+  { const c = new THREE.Mesh(new THREE.TorusGeometry(RR * .78, .035, 6, 48), brass); c.position.z = .04; reactor.add(c); }
+  const coil = new THREE.Group(); reactor.add(coil);
+  { const c = new THREE.Mesh(new THREE.TorusGeometry(RR * .6, .09, 6, 10), std(0x2a343a, .4, { metalness: .8 })); c.position.z = .06; c.rotation.z = Math.PI / 10; coil.add(c);
+    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, b = new THREE.Mesh(new THREE.BoxGeometry(.1, .18, .1), brass); b.position.set(Math.cos(a) * RR * .6, Math.sin(a) * RR * .6, .12); b.rotation.z = a; coil.add(b); } }   // ten clamps on the coil ring
+  const core = new THREE.Mesh(new THREE.CircleGeometry(RR * .36, 32), cyanMat); core.position.z = .08; reactor.add(core);
+  { const h = new THREE.Mesh(new THREE.RingGeometry(RR * .36, RR * .5, 32), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: .3 })); h.position.z = .075; reactor.add(h); }
+  const rLight = new THREE.PointLight(0x9be8ff, 7, 7, 1.6); rLight.position.set(0, 2.9, -.5); throne.add(rLight);
+  /* the fan: pipes spring radially from the reactor rim, run straight for a stretch, then kink in angular random turns and leave the dome */
+  { const mats = [std(0x8a6c3c, .4, { metalness: .6, emissive: 0x2e2210 }), std(0x4d3f29, .45, { metalness: .6, emissive: 0x1c150a }), std(0x2a343a, .5, { metalness: .6, emissive: 0x0c1418 })];
+    const UP = new THREE.Vector3(0, 1, 0);
+    const seg = (a, b, r, mat) => { const len = a.distanceTo(b), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), mat); m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(UP, b.clone().sub(a).normalize()); throne.add(m); return m; };
+    const N = 30;
+    for (let i = 0; i < N; i++) {
+      const base = (i / (N - 1) - .5) * Math.PI * 2 * .86, r = .05 + Math.random() * .06, mat = mats[i % 3];
+      let ang = base, p = RC.clone().add(new THREE.Vector3(Math.sin(ang), Math.cos(ang), -.04).multiplyScalar(RR * .98));
+      const first = p.clone().add(new THREE.Vector3(Math.sin(ang), Math.cos(ang), 0).multiplyScalar(1.5));         // a clean straight run out of the reactor
+      seg(p, first, r, mat); const j0 = new THREE.Mesh(new THREE.SphereGeometry(r * 1.25, 8, 6), brass); j0.position.copy(first); throne.add(j0); p = first;
+      const n = 3 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < n; k++) {
+        ang = Math.max(base - .75, Math.min(base + .75, ang + (Math.random() - .5) * 1.1));
+        const q = p.clone().add(new THREE.Vector3(Math.sin(ang), Math.cos(ang), (Math.random() - .5) * .3).multiplyScalar(1.4 + Math.random() * 2.0));
+        seg(p, q, r, mat);
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(r * 1.25, 8, 6), brass); joint.position.copy(q); throne.add(joint);
+        p = q;
+      }
+    } }
+  const seatLight = new THREE.PointLight(0x9be8ff, 9, 12, 1.6); seatLight.position.set(-.1, THR_Y + 5.2, -5.6); scene.add(seatLight);
+
+  /* the altar before the throne, carrying the codex */
+  const ALT_Y = DESK_Y + .8;
+  mesh(new THREE.BoxGeometry(2.7, .8, 1.8), std(0x1a2126, .5, { metalness: .5 }), -.1, DESK_Y + .4, .55);
+  mesh(new THREE.BoxGeometry(2.86, .08, 1.96), brass, -.1, ALT_Y + .04, .55);
+  mesh(new THREE.BoxGeometry(2.78, .05, 1.88), std(0x0e1316, .5, { metalness: .5 }), -.1, DESK_Y + .05, .55);
+  { const fg = mesh(gearGeo(.34, .29, 14, .02, 6), std(0x6b5430, .35, { metalness: .85 }), -.1, DESK_Y + .4, .55 + .915); fg.castShadow = false; fg.receiveShadow = false;           // a small wheel on the altar front
+    const fr = new THREE.Mesh(new THREE.TorusGeometry(.4, .01, 6, 60), new THREE.MeshBasicMaterial({ color: ICE })); fr.position.copy(fg.position).add(new THREE.Vector3(0, 0, .02)); scene.add(fr); }
+  const sigil = mesh(gearGeo(1.05, .93, 22, .012, 8), std(0x6b5430, .35, { metalness: .85 }), -.1, ALT_Y + .088, .55); sigil.rotation.x = -Math.PI / 2; sigil.castShadow = false;
+  [[1.17, .008], [1.27, .005]].forEach(([r, w]) => { const ring = new THREE.Mesh(new THREE.TorusGeometry(r, w, 6, 100), new THREE.MeshBasicMaterial({ color: ICE, transparent: true, opacity: .55 })); ring.rotation.x = Math.PI / 2; ring.position.set(-.1, ALT_Y + .092, .55); scene.add(ring); });
+
+  /* two braziers that breathe cold light and icy smoke */
+  const braziers = [-2.9, 2.7];
+  braziers.forEach(bx => {
+    const b = new THREE.Group(); b.position.set(bx, DESK_Y, .55); scene.add(b);
+    mesh(new THREE.CylinderGeometry(.22, .3, .1, 20), iron, 0, .05, 0, b);
+    mesh(new THREE.CylinderGeometry(.09, .15, .62, 16), darkIron, 0, .4, 0, b);
+    mesh(new THREE.CylinderGeometry(.34, .15, .24, 24, 1, true), Object.assign(iron.clone(), { side: THREE.DoubleSide }), 0, .81, 0, b);
+    mesh(new THREE.TorusGeometry(.34, .022, 8, 32), brass, 0, .93, 0, b).rotation.x = Math.PI / 2;
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(.3, 28), new THREE.MeshBasicMaterial({ color: ICE })); glow.rotation.x = -Math.PI / 2; glow.position.y = .9; b.add(glow);
+    const l = new THREE.PointLight(ICE, 4, 6, 1.8); l.position.set(bx, DESK_Y + 1.2, .55); scene.add(l);
+  });
+
+  /* light: one cold spot falls on the codex, the rest of the room stays dark; a bruised red glow lives behind the throne */
+  const KEY = 90;
+  const lampLight = new THREE.SpotLight(0xa8ecff, KEY, 14, .42, .85, 1.4); lampLight.position.set(-.1, 6.2, 3.0); lampLight.target.position.set(-.1, ALT_Y, .55);
+  lampLight.castShadow = true; lampLight.shadow.mapSize.set(2048, 2048); lampLight.shadow.bias = -.0008; scene.add(lampLight, lampLight.target);
+  const rimRed = new THREE.PointLight(0xff2a14, 14, 20, 1.6); rimRed.position.set(-.1, 7, -10.6); scene.add(rimRed);
+  scene.add(new THREE.AmbientLight(0x1b3340, .55));
+
+  /* the codex (clickable): leather, brass corners, a wheel sigil on the cover */
+  const nb = new THREE.Group(); nb.position.set(-.1, ALT_Y + .08, .55); nb.rotation.y = -.16; nb.scale.setScalar(1.3); scene.add(nb);
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 700; const cx = cv.getContext('2d');
+  const coverTex = new THREE.CanvasTexture(cv); coverTex.colorSpace = THREE.SRGBColorSpace; coverTex.anisotropy = 4;
+  function drawCover() {
+    cx.fillStyle = '#0c1317'; cx.fillRect(0, 0, 512, 700);
+    for (let i = 0; i < 1400; i++) { cx.globalAlpha = Math.random() * .07; cx.fillStyle = Math.random() > .5 ? '#fff' : '#000'; cx.fillRect(Math.random() * 512, Math.random() * 700, 2, 2); }
+    cx.globalAlpha = 1; cx.strokeStyle = '#B8935A'; cx.lineWidth = 4; cx.strokeRect(34, 34, 444, 632); cx.lineWidth = 1.5; cx.strokeRect(48, 48, 416, 604);
+    cx.fillStyle = '#B8935A'; [[34, 34], [478, 34], [34, 666], [478, 666]].forEach(([x, y]) => { cx.beginPath(); cx.arc(x, y, 11, 0, 6.3); cx.fill(); });
+    // the wheel emblem
+    const gx = 256, gy = 250, R = 98, r = 80, T = 20; cx.strokeStyle = '#A9E6F5'; cx.lineWidth = 3; cx.shadowColor = '#A9E6F5'; cx.shadowBlur = 14; cx.beginPath();
+    for (let i = 0; i < T; i++) { const a = i / T * 6.2832, s = 6.2832 / T; [[0, r], [.22, R], [.5, R], [.72, r]].forEach(([f, rr], k) => { const x = gx + Math.cos(a + f * s) * rr, y = gy + Math.sin(a + f * s) * rr; (i === 0 && k === 0) ? cx.moveTo(x, y) : cx.lineTo(x, y); }); }
+    cx.closePath(); cx.stroke(); cx.beginPath(); cx.arc(gx, gy, 46, 0, 6.3); cx.stroke(); cx.beginPath(); cx.arc(gx, gy, 14, 0, 6.3); cx.stroke();
+    for (let k = 0; k < 6; k++) { const a = k / 6 * 6.2832; cx.beginPath(); cx.moveTo(gx + Math.cos(a) * 14, gy + Math.sin(a) * 14); cx.lineTo(gx + Math.cos(a) * 46, gy + Math.sin(a) * 46); cx.stroke(); }
+    cx.shadowBlur = 0; cx.fillStyle = '#E8E2D6'; cx.textAlign = 'center'; cx.font = '700 62px Cinzel, Georgia, serif'; cx.fillText('CODEX', 256, 470);
+    cx.font = '500 22px Montserrat, sans-serif'; cx.globalAlpha = .7; cx.fillText('WRITINGS · THOUGHTS · IDEAS', 256, 515); cx.globalAlpha = 1;
+    cx.strokeStyle = '#B8935A'; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(176, 546); cx.lineTo(336, 546); cx.stroke();
+    coverTex.needsUpdate = true;
+  }
+  drawCover(); document.fonts && document.fonts.load('700 62px Cinzel').then(drawCover).catch(() => {});
+  const cover = new THREE.MeshStandardMaterial({ map: coverTex, roughness: .55, metalness: .25 });
+  const edge = std(0x0a1115, .6, { metalness: .4 }), paper = std(0xb9ab8c, .95, { metalness: 0 });
+  mesh(new THREE.BoxGeometry(1.52, .035, 2.07), edge, 0, .0175, 0, nb);                                          // back board
+  mesh(new THREE.BoxGeometry(1.42, .095, 1.98), paper, .02, .0825, 0, nb);                                       // the pages
+  mesh(new THREE.BoxGeometry(1.52, .035, 2.07), [edge, edge, cover, edge, edge, edge], 0, .1475, 0, nb);         // front board with the cover art
+  mesh(new THREE.BoxGeometry(.08, .17, 2.07), darkIron, -.735, .0825, 0, nb);                                    // spine
+  [-.7, -.2, .3, .8].forEach(z => mesh(new THREE.BoxGeometry(.1, .185, .06), brass, -.74, .0825, z, nb));        // spine bands
+  [[-.7, -.98], [.7, -.98], [-.7, .98], [.7, .98]].forEach(([x, z]) => mesh(new THREE.BoxGeometry(.14, .03, .14), brass, x, .18, z, nb));   // corner plates
+  mesh(new THREE.BoxGeometry(.12, .2, .22), brass, .77, .1, 0, nb);                                              // clasp
+
+  /* smoke: soft sprites that rise from each brazier, plus a low mist that crawls across the altar */
+  const puff = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.5, 'rgba(255,255,255,.35)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+  const smoke = [];
+  [...braziers.map(bx => ({ x: bx, y: DESK_Y + .95, z: .55, dir: bx < 0 ? 1 : -1, n: 16 })), { x: -.1, y: THR_Y + 4.2, z: -7.8, dir: 0, n: 12 }].forEach(em => { for (let i = 0; i < em.n; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puff, color: 0xaeeaff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })); s.userData = { t: i / em.n, em, seed: Math.random() * 6.3 }; scene.add(s); smoke.push(s); } });
+  const mist = []; for (let i = 0; i < 8; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puff, color: 0x8fdcf0, transparent: true, opacity: .07, depthWrite: false, blending: THREE.AdditiveBlending })); const sc = 3 + Math.random() * 2.2; s.scale.set(sc, sc * .45, 1); s.position.set(-4 + Math.random() * 8, DESK_Y + .22 + Math.random() * .3, -1.2 + Math.random() * 2.6); s.userData = { sp: (Math.random() * .08 + .03) * (Math.random() > .5 ? 1 : -1), base: s.position.y }; scene.add(s); mist.push(s); }
+
+  /* drifting cold motes */
+  const N = 160, pos = new Float32Array(N * 3), vel = [];
+  for (let i = 0; i < N; i++) { pos[i * 3] = -4 + Math.random() * 8; pos[i * 3 + 1] = DESK_Y + Math.random() * 2.6; pos[i * 3 + 2] = -1.4 + Math.random() * 3; vel.push(Math.random() * .1 + .02); }
+  const dgeo = new THREE.BufferGeometry(); dgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(dgeo, new THREE.PointsMaterial({ color: 0xbdefff, size: .026, transparent: true, opacity: .55, depthWrite: false })));
+
+  /* camera: breathes, follows the pointer a touch, flies to the codex on click */
+  const REST = { pos: new THREE.Vector3(-0.1, 3.1, 8.6), look: new THREE.Vector3(-0.1, 4.4, -3.0) };
+  const READ = { pos: new THREE.Vector3(-.1, ALT_Y + 1.6, 2.6), look: new THREE.Vector3(-.1, ALT_Y + .1, .5) };
+  let target = REST, camPos = REST.pos.clone(), camLook = REST.look.clone();
+  camera.position.copy(camPos); camera.lookAt(camLook);
+  let ptr = { x: 0, y: 0 }, started = false;
+  addEventListener('pointermove', e => { ptr.x = e.clientX / innerWidth * 2 - 1; ptr.y = e.clientY / innerHeight * 2 - 1; });
+  const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
+  let hover = false;
+  function pick(e) { v2.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(v2, camera); return ray.intersectObject(nb, true).length > 0; }
+  canvas.addEventListener('pointermove', e => { if (!started || panelOpen) return; hover = pick(e); canvas.style.cursor = hover ? 'pointer' : 'default'; hint.classList.toggle('on', hover); });
+  canvas.addEventListener('click', e => { if (started && !panelOpen && pick(e)) openNotebook(); });
+  function openNotebook() { target = READ; hint.classList.remove('on'); hover = false; canvas.style.cursor = 'default'; setTimeout(showPanel, 900); }
+  onPanelClosed = () => { target = REST; };
+  addEventListener('keydown', e => { if (e.key === 'Escape' && panelOpen) closePanel(); if ((e.key === 'Enter') && started && !panelOpen) openNotebook(); });
+
+  $('#enter').onclick = () => { started = true; $('#opener').classList.add('gone'); hud.classList.add('on'); if (location.hash.slice(1)) setTimeout(openNotebook, 1200); else setTimeout(() => hint.classList.add('on'), 2200); setTimeout(() => !panelOpen && !hover && hint.classList.remove('on'), 7000); };
+
+  const clock = new THREE.Clock(); let last = 0;
+  (function frame() {
+    requestAnimationFrame(frame);
+    const t = clock.getElapsedTime(), dt = Math.min(t - last, .05); last = t;
+    camPos.lerp(target.pos, .045); camLook.lerp(target.look, .06);
+    const k = target === REST ? 1 : .15;
+    camera.position.set(camPos.x + ptr.x * .35 * k + Math.sin(t * .4) * .04, camPos.y - ptr.y * .12 * k + Math.sin(t * .31) * .03, camPos.z);
+    camera.lookAt(camLook);
+    lampLight.intensity = KEY * (.96 + Math.sin(t * 1.3) * .03 + Math.sin(t * 6.1) * .012);
+    nb.position.y = ALT_Y + .08 + (hover && target === REST ? .08 : 0); nb.rotation.y += ((hover ? -.1 : -.16) - nb.rotation.y) * .1;
+    wheels.forEach(o => { o.g.rotation.z += o.w * dt; }); halo.rotation.z -= .02 * dt; sigil.rotation.z += .05 * dt; gateGlow.material.opacity = .26 + Math.sin(t * .9) * .05 + Math.sin(t * 3.7) * .03; coil.rotation.z += .12 * dt; core.scale.setScalar(1 + Math.sin(t * 2.1) * .06); rimRed.intensity = 14 * (.85 + Math.sin(t * .7) * .15);
+    smoke.forEach(s => { const d = s.userData; d.t = (d.t + dt * .1) % 1; const u = d.t;
+      s.position.set(d.em.x + Math.sin(u * 5 + d.seed) * .14 * (1 + u) + d.em.dir * u * .35, d.em.y + u * 1.9, d.em.z + Math.cos(u * 4 + d.seed) * .1);
+      s.scale.setScalar(.28 + u * 1.25); s.material.opacity = Math.pow(Math.sin(u * Math.PI), 1.3) * (d.em.dir ? .3 : .22); });
+    mist.forEach(s => { s.position.x += s.userData.sp * dt; if (s.position.x > 4.6) s.position.x = -4.6; if (s.position.x < -4.6) s.position.x = 4.6; s.position.y = s.userData.base + Math.sin(t * .3 + s.position.x) * .03; });
+    const p = dgeo.attributes.position; for (let i = 0; i < N; i++) { let y = p.getY(i) + vel[i] * dt * .8 + Math.sin(t + i) * .0004; if (y > DESK_Y + 2.8) y = DESK_Y + .1; p.setY(i, y); p.setX(i, p.getX(i) + Math.sin(t * .5 + i) * .0006); } p.needsUpdate = true;
+    renderer.render(scene, camera);
+  })();
+}
+</script>
+</body>
+</html>
